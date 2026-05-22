@@ -2,6 +2,7 @@ import os
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
+from app.scraper import scrape_company_website, summarize_company
 
 load_dotenv()
 
@@ -71,3 +72,8 @@ def generate_reply(classification: dict, channel: str) -> str:
     )
 
     return response.choices[0].message.content.strip()
+
+def enrich_lead(company_name: str) -> str:
+    scraped = scrape_company_website(company_name)
+    summary = summarize_company(company_name, scraped, client)
+    return summary
