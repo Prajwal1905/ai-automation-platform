@@ -6,6 +6,7 @@ from app.schemas import IncomingMessage
 from app.models import Lead, Invoice
 from datetime import datetime
 from sqlalchemy.orm import Session
+from app.notifications import send_slack_alert
 
 router = APIRouter(prefix="/api", tags=["automation"])
 
@@ -66,6 +67,8 @@ def handle_message(payload: IncomingMessage, db: Session = Depends(get_db)):
 
     # generate auto reply
     reply = generate_reply(classification, payload.channel)
+    
+    send_slack_alert(classification, payload.sender, payload.channel)
 
     return {
         "status": "processed",
@@ -154,6 +157,7 @@ async def twilio_webhook(
 
     # generate reply and return in TwiML format so Twilio sends it back on WhatsApp
     reply = generate_reply(classification, "whatsapp")
+    send_slack_alert(classification, From, "whatsapp")
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Message>{reply}</Message>
