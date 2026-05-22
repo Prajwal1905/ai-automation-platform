@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - qdrant
+    networks:
+      - ai-network
+
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27018:27017"
+    networks:
+      - ai-network
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6334:6333"
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
