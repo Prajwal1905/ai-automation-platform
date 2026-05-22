@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 from app.routes import router
+from app.database import engine, test_connection
+from app import models
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI Automation Platform",
@@ -11,4 +15,5 @@ app.include_router(router)
 
 @app.get("/")
 def root():
-    return {"status": "running", "message": "AI Automation Platform is live"}
+    db_status = test_connection()
+    return {"status": "running", "databases": db_status}
