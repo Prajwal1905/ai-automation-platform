@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 from app.database import test_connection, messages_collection, leads_collection
 from app.llm import classify_message, generate_reply, enrich_lead
 from app.schemas import IncomingMessage
 from datetime import datetime
+from app.rag import store_invoice
 
 router = APIRouter(prefix="/api", tags=["automation"])
 
@@ -63,4 +64,17 @@ def handle_message(payload: IncomingMessage):
         "classification": classification,
         "auto_reply": reply,
         "company_summary": enrichment
+    }
+
+
+@router.post("/invoice")
+async def process_invoice(sender: str, file: UploadFile = File(...)):
+   
+    file_bytes = await file.read()
+    result = store_invoice(file_bytes, sender)
+    return {
+        "status": "processed",
+        "sender": sender,
+        "extracted_fields": result["extracted"],
+        "stored_in_qdrant": True
     }
