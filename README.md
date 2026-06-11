@@ -9,7 +9,7 @@ Built to demonstrate real-world agentic AI and automation capabilities using the
 ## 🎥 Demo
 
 <!-- Drag and drop your demo video here in the GitHub editor, or replace with your link -->
-[Watch the 60-second demo](https://drive.google.com/file/d/15yVkSbb2_hJl3JsaL8nDwg60Be13P1MG/view?usp=sharing) — one WhatsApp message triggers AI classification, lead enrichment, CRM sync, Slack alert, and an auto-reply, with zero human involvement.
+[Watch the demo](https://drive.google.com/file/d/1vte-3BrAvF8mpg_NU0iwg6GjNdpHyVGZ/view?usp=sharing) — one WhatsApp message triggers AI classification, lead enrichment, CRM sync, Slack alert, and an auto-reply. Invoice PDFs emailed to the business inbox are processed automatically via a Gmail n8n workflow and RAG pipeline — with zero human involvement.
 
 ---
 
@@ -20,6 +20,7 @@ A customer sends a WhatsApp message. Within seconds:
 - The message is classified by GPT via a LangChain pipeline (lead, support, invoice, or other)
 - If it's a lead, the company is researched via web scraping and a profile is built
 - If it's an invoice PDF, key fields are extracted using a RAG pipeline
+- If it's an email with a PDF attachment, n8n detects it via Gmail polling, downloads the attachment, and routes it through the RAG pipeline automatically
 - A human-sounding reply is sent back automatically
 - The sales team is notified on Slack
 - A contact is created in HubSpot CRM
