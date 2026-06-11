@@ -6,11 +6,18 @@ Built to demonstrate real-world agentic AI and automation capabilities using the
 
 ---
 
-# What it does
+## 🎥 Demo
+
+<!-- Drag and drop your demo video here in the GitHub editor, or replace with your link -->
+[Watch the 60-second demo](https://drive.google.com/file/d/15yVkSbb2_hJl3JsaL8nDwg60Be13P1MG/view?usp=sharing) — one WhatsApp message triggers AI classification, lead enrichment, CRM sync, Slack alert, and an auto-reply, with zero human involvement.
+
+---
+
+## What it does
 
 A customer sends a WhatsApp message. Within seconds:
 
-- The message is classified by GPT (lead, support, invoice, or other)
+- The message is classified by GPT via a LangChain pipeline (lead, support, invoice, or other)
 - If it's a lead, the company is researched via web scraping and a profile is built
 - If it's an invoice PDF, key fields are extracted using a RAG pipeline
 - A human-sounding reply is sent back automatically
@@ -23,12 +30,12 @@ Zero human involvement.
 
 ---
 
-# Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Python, FastAPI |
-| AI / LLM | OpenAI GPT-4o-mini, LangChain |
+| AI / LLM | OpenAI GPT-4o-mini, LangChain (LCEL chains) |
 | RAG Pipeline | Qdrant, OpenAI Embeddings |
 | Workflow Automation | n8n |
 | WhatsApp Integration | Twilio |
@@ -40,21 +47,24 @@ Zero human involvement.
 
 ---
 
-# Architecture
+## Architecture
 
 ```text
-WhatsApp / Email
+WhatsApp /Email
         ↓
 n8n (workflow orchestration)
         ↓
 FastAPI Backend
         ↓
-┌─────────────────────────────┐
-│ LLM Classifier (GPT-4o)     │
-│ Lead Enrichment (scraper)   │
-│ Invoice RAG (Qdrant)        │
-│ Auto Reply Generator        │
-└─────────────────────────────┘
+┌──────────────────────────────────┐
+│ LangChain LCEL Pipelines:        │
+│  • Classifier (JsonOutputParser) │
+│  • Reply Generator               │
+│  • Company Summarizer            │
+│  • Invoice Extractor             │
+│ Lead Enrichment (web scraper)    │
+│ Invoice RAG (Qdrant embeddings)  │
+└──────────────────────────────────┘
         ↓              ↓           ↓
      MongoDB       PostgreSQL    HubSpot
     (messages)    (leads,        (CRM)
@@ -67,18 +77,30 @@ FastAPI Backend
 
 ---
 
-# Project Structure
+## How the AI layer works
+
+All LLM interactions run through **LangChain LCEL chains** (`prompt | model | parser`):
+
+- **Classification** — `ChatPromptTemplate → ChatOpenAI (temperature=0) → JsonOutputParser`. Deterministic, structured output: intent, summary, name, email, company, urgency.
+- **Auto-replies** — same pattern with `temperature=0.7` and `StrOutputParser` for natural, varied responses.
+- **Invoice extraction** — PDF text → OpenAI embedding (1536-dim) stored in Qdrant (cosine similarity) → LCEL chain extracts vendor, amount, due date, and invoice number as JSON.
+- **Lead enrichment** — DuckDuckGo search + BeautifulSoup scraping → LCEL summarization chain. Falls back to the LLM's own knowledge when scraping is blocked.
+
+---
+
+## Project Structure
 
 ```text
 ai-automation-platform/
 ├── app/
 │   ├── main.py          # FastAPI app entry point
 │   ├── routes.py        # API endpoints
-│   ├── llm.py           # LLM classifier and reply generator
-│   ├── rag.py           # Invoice RAG pipeline
-│   ├── scraper.py       # Company website scraper
+│   ├── llm.py           # LangChain classification and reply chains
+│   ├── rag.py           # Invoice RAG pipeline (Qdrant + extraction chain)
+│   ├── scraper.py       # Company website scraper + summarization chain
 │   ├── crm.py           # HubSpot CRM integration
 │   ├── notifications.py # Slack alerts
+│   ├── helpers.py       # Message saving and lead processing
 │   ├── database.py      # MongoDB and PostgreSQL connections
 │   ├── models.py        # PostgreSQL table definitions
 │   └── schemas.py       # Pydantic request schemas
@@ -90,23 +112,19 @@ ai-automation-platform/
 
 ---
 
-# Setup
+## Setup
 
-## Prerequisites
+### Prerequisites
 
 - Python 3.9+
 - Docker Desktop
 - Node.js 18+
 
----
-
-# Backend Setup
+### Backend
 
 ```bash
-# create virtual environment
+# create and activate virtual environment
 python -m venv venv
-
-# activate virtual environment
 venv\Scripts\activate
 
 # install dependencies
@@ -114,7 +132,6 @@ pip install -r requirements.txt
 
 # configure environment
 cp .env.example .env
-
 # fill in your API keys inside .env
 
 # start dependencies
@@ -124,36 +141,32 @@ docker start qdrant mongodb n8n
 uvicorn app.main:app --reload --port 8001
 ```
 
----
-
-# Frontend Setup
+### Frontend
 
 ```bash
 cd frontend
-
 npm install
-
 npm run dev
 ```
 
 ---
 
-# Environment Variables
+## Environment Variables
 
 ```env
 MONGODB_URL=mongodb://localhost:27017
 POSTGRES_URL=postgresql://postgres:password@localhost:5432/ai_automation
-OPENAI_API_KEY=
+OPENAI_API_KEY=your_openai_key_here
 QDRANT_URL=http://localhost:6333
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-SLACK_WEBHOOK_URL=
-HUBSPOT_API_KEY=
+TWILIO_ACCOUNT_SID=your_twilio_sid
+TWILIO_AUTH_TOKEN=your_twilio_token
+SLACK_WEBHOOK_URL=your_slack_webhook
+HUBSPOT_API_KEY=your_hubspot_private_app_token
 ```
 
 ---
 
-# API Endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -166,13 +179,43 @@ HUBSPOT_API_KEY=
 | GET | /api/stats | Dashboard summary stats |
 | GET | /api/health | Health check |
 
+Interactive API docs available at `http://localhost:8001/docs` (Swagger UI).
+
 ---
 
-# Key Design Decisions
+## Example: end-to-end lead flow
+
+Request:
+
+```json
+POST /api/webhook
+{
+  "sender": "+919876543210",
+  "channel": "whatsapp",
+  "message": "Hi, I'm Rahul from Tata Motors. We're interested in your automation product. Can we schedule a demo?"
+}
+```
+
+Result (seconds later):
+
+- Classified as `lead` with extracted name, company, and urgency
+- Company profile generated automatically
+- Lead saved to MongoDB and PostgreSQL
+- Contact created in HubSpot CRM
+- Slack alert sent to the sales team
+- Personalized reply returned to the sender
+
+---
+
+## Key Design Decisions
+
+### LangChain LCEL for all LLM calls
+
+Every LLM interaction is a composable chain: `prompt | model | parser`. `JsonOutputParser` makes structured extraction robust against malformed output (handles markdown fences and stray text better than raw `json.loads`), while `StrOutputParser` handles free-text replies. Two model configurations are used: `temperature=0` for deterministic extraction, `temperature=0.7` for natural-sounding replies.
 
 ### MongoDB for messages, PostgreSQL for leads and invoices
 
-Messages are unstructured and written at high frequency, making MongoDB a natural fit. Leads and invoices are structured relational data that benefit from SQL queries and foreign key constraints.
+Messages are unstructured and written at high frequency, making MongoDB a natural fit. Leads and invoices are structured relational data that benefit from SQL queries and reporting.
 
 ### LLM fallback for company enrichment
 
@@ -188,15 +231,11 @@ Keeps the FastAPI backend stateless and focused on business logic. n8n handles t
 
 ---
 
-# .env.example
+## Roadmap / Known Improvements
 
-```env
-MONGODB_URL=mongodb://localhost:27017
-POSTGRES_URL=postgresql://postgres:password@localhost:5432/ai_automation
-OPENAI_API_KEY=your_openai_key_here
-QDRANT_URL=http://localhost:6333
-TWILIO_ACCOUNT_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_twilio_token
-SLACK_WEBHOOK_URL=your_slack_webhook
-HUBSPOT_API_KEY=your_hubspot_key
-```
+- [ ] Twilio request signature verification on the webhook
+- [ ] Background task queue (Celery + Redis) so LLM processing doesn't block requests
+- [ ] Idempotency on invoice uploads (unique constraint on invoice_number)
+- [ ] Numeric amount column with currency parsing
+- [ ] WebSocket-based live dashboard updates
+- [ ] Retry + structured logging for Slack and HubSpot integration failures
