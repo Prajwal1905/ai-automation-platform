@@ -4,12 +4,17 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 from openai import OpenAI
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 import uuid
 
 load_dotenv()
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 qdrant = QdrantClient(url=os.getenv("QDRANT_URL"))
+llm_strict = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
 
 COLLECTION_NAME = "invoices"
 
@@ -67,27 +72,19 @@ def store_invoice(file_bytes: bytes, sender: str) -> dict:
     return {"point_id": point_id, "extracted": extracted, "raw_text": raw_text[:500]}
 
 def extract_invoice_fields(text: str) -> dict:
-    # ask LLM to pull out the important invoice fields
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Extract invoice fields and return only valid JSON."},
-            {"role": "user", "content": f"""
-            Extract these fields from the invoice text below:
-            {{
-                "vendor": "company name or null",
-                "amount": "total amount or null",
-                "due_date": "due date or null",
-                "invoice_number": "invoice number or null",
-                "description": "what the invoice is for or null"
-            }}
+    # ask LLM to pull out the important invoice fields via LangChain
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "Extract invoice fields and return only valid JSON."),
+        ("user", """Extract these fields from the invoice text below:
+{{"vendor": "company name or null",
+  "amount": "total amount or null",
+  "due_date": "due date or null",
+  "invoice_number": "invoice number or null",
+  "description": "what the invoice is for or null"}}
 
-            Invoice text:
-            {text[:1500]}
-            """}
-        ],
-        temperature=0
-    )
-    import json
-    result = response.choices[0].message.content.strip()
-    return json.loads(result)
+Invoice text:
+{invoice_text}""")
+    ])
+
+    chain = prompt | llm_strict | JsonOutputParser()
+    return chain.invoke({"invoice_text": text[:1500]})

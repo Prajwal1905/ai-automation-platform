@@ -1,6 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+#Searches DuckDuckGo for the company website
+#BeautifulSoup grabs meta description or first paragraphs
 def scrape_company_website(company_name: str) -> str:
     try:
         search_url = f"https://html.duckduckgo.com/html/?q={company_name}+official+website"
@@ -29,22 +36,19 @@ def scrape_company_website(company_name: str) -> str:
         return None
 
 
-def summarize_company(company_name: str, scraped_content: str, llm_client) -> str:
+# Summarizes company info using LangChain; falls back to LLM knowledge if scraping failed
+def summarize_company(company_name: str, scraped_content: str) -> str:
     try:
-        # if scraping failed, fall back to LLM's own knowledge
         if scraped_content:
-            prompt = f"Company: {company_name}\n\nScraped content:\n{scraped_content}"
+            user_input = f"Company: {company_name}\n\nScraped content:\n{scraped_content}"
         else:
-            prompt = f"Give me a 2-3 sentence CRM summary of the company: {company_name}. Include what they do, their industry, and size if known."
+            user_input = f"Give me a 2-3 sentence CRM summary of the company: {company_name}. Include what they do, their industry, and size if known."
 
-        response = llm_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Summarize company information in 2-3 sentences for a CRM record."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0
-        )
-        return response.choices[0].message.content.strip()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "Summarize company information in 2-3 sentences for a CRM record."),
+            ("user", "{input}")
+        ])
+        chain = prompt | llm | StrOutputParser()
+        return chain.invoke({"input": user_input})
     except Exception as e:
         return f"Summary failed: {str(e)}"
