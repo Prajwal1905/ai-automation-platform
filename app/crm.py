@@ -6,6 +6,7 @@ load_dotenv()
 
 HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")
 
+#POSTs to HubSpot CRM v3 API with Bearer token, splits name into first/last.
 def create_hubspot_contact(name: str, email: str, company: str, summary: str):
     # only create contact if we have at least a name or email
     if not name and not email:
