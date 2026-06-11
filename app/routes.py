@@ -1,13 +1,14 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends
+from fastapi import APIRouter, UploadFile, File, Form, Depends, BackgroundTasks
 from fastapi.responses import Response
 from app.database import test_connection, get_db
 from app.llm import classify_message, generate_reply
 from app.schemas import IncomingMessage
 from app.models import Lead, Invoice
-from app.helpers import save_message, process_lead
+from app.helpers import save_message, process_lead, send_whatsapp_reply
 from app.notifications import send_slack_alert
 from datetime import datetime
 from sqlalchemy.orm import Session
+from app.database import messages_collection
 
 router = APIRouter(prefix="/api", tags=["automation"])
 
@@ -42,35 +43,39 @@ def handle_message(payload: IncomingMessage, db: Session = Depends(get_db)):
         "company_summary": enrichment
     }
 
-
+#receives WhatsApp messages from Twilio 
 @router.post("/twilio/webhook")
 async def twilio_webhook(
+    background_tasks: BackgroundTasks ,
     From: str = Form(...),
     Body: str = Form(...),
+    
     db: Session = Depends(get_db)
 ):
-    # classify incoming WhatsApp message
-    classification = classify_message(From, Body)
+    # return TwiML instantly — Twilio won't timeout
+    # process everything in background
+    background_tasks.add_task(process_whatsapp, From, Body, db)
 
-    # save to MongoDB
-    save_message(From, "whatsapp", Body, classification)
-
-    # process lead if applicable
-    if classification["intent"] == "lead":
-        process_lead(From, "whatsapp", classification, db)
-
-    # notify team and generate reply in TwiML format
-    send_slack_alert(classification, From, "whatsapp")
-    reply = generate_reply(classification, "whatsapp")
-
-    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Message>{reply}</Message>
+    <Message>Got your message! Connecting you with our team shortly.</Message>
 </Response>"""
 
     return Response(content=twiml, media_type="application/xml")
 
 
+def process_whatsapp(From: str, Body: str, db: Session):
+    # this runs in background after TwiML already returned
+    classification = classify_message(From, Body)
+    save_message(From, "whatsapp", Body, classification)
+    if classification["intent"] == "lead":
+        process_lead(From, "whatsapp", classification, db)
+    send_slack_alert(classification, From, "whatsapp")
+    # generate AI reply and send as follow-up via Twilio API
+    reply = generate_reply(classification, "whatsapp")
+    send_whatsapp_reply(From, reply)
+
+#handles PDF uploads
 @router.post("/invoice")
 async def process_invoice(sender: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     from app.rag import store_invoice
