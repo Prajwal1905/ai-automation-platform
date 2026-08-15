@@ -48,6 +48,10 @@ Zero human involvement.
 
 ---
 
+## Architecture Diagram
+
+![Architecture](architecture.png)
+
 ## Architecture
 
 ```text
